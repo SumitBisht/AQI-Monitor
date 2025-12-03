@@ -1,3 +1,4 @@
+#include <ESP8266WiFi.h>
 #include <SPI.h>
 #include <Wire.h>
 #include "MQ135.h"
@@ -13,6 +14,12 @@
 #define SCREEN_HEIGHT 64    // OLED display height, in pixels
 #define OLED_RESET -1       // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+String apiKey = "xxxxxx"; // Enter your Write API key from ThingSpeak
+const char *ssid = "xxxxxx";  // Replace with your wifi ssid and wpa2 key
+const char *pass = "xxxxxx";   // Replace with your wifi password
+const char* server = "api.thingspeak.com";
+WiFiClient wifiClient;
 
 void setup()
 {
@@ -36,13 +43,24 @@ void setup()
   display.setTextColor(WHITE);
   display.print("Starting");
   display.display();
-  delay(4000);
+
+  Serial.println("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(2000);
+    Serial.println(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println(WiFi.localIP());
 }
 
 void loop() {
-    delay(4000);
+    delay(2000);
     MQ135 gasSensor = MQ135(A0);
-    float air_quality = gasSensor.getPPM();
+    float ppm = gasSensor.getPPM();
     float zero = gasSensor.getRZero();
     int val = analogRead(A0); 
     Serial.print ("raw = "); 
@@ -50,7 +68,7 @@ void loop() {
     Serial.print ("rzero: "); 
     Serial.println (zero); 
     Serial.print("Air Quality (PPM): ");
-    Serial.println(air_quality);
+    Serial.println(ppm);
     //// Display this in monitor
     display.clearDisplay();
     display.setCursor(40, 0);
@@ -63,4 +81,23 @@ void loop() {
     display.setCursor(0,50);
     display.println("PPM (C02)");
     display.display();
+    publishExternally(val);
+}
+
+void publishExternally(int sensorValue) {
+  if (wifiClient.connect(server, 80)) {
+    String payload = apiKey + "&field1="+String(sensorValue);
+    wifiClient.print("POST /update HTTP/1.1\n");
+    wifiClient.print("Host: api.thingspeak.com\n");
+    wifiClient.print("Connection: close\n");
+    wifiClient.print("X-THINGSPEAKAPIKEY: " + apiKey + "\n");
+    wifiClient.print("Content-Type: application/x-www-form-urlencoded\n");
+    wifiClient.print("Content-Length: ");
+    wifiClient.print(payload.length());
+    wifiClient.print("\n\n");
+    wifiClient.print(payload);
+
+  }
+  wifiClient.stop();
+  delay(1000);
 }
